@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -57,9 +57,23 @@ jobs:
         run: gradle --no-daemon clean build -PmianbaoJar="$PWD/.ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar"
 
       - name: Upload compiled mod
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: mianbao-sable-explosion-compat-1.0.1
           path: build/libs/mianbao-sable-explosion-compat-1.0.1.jar
           if-no-files-found: error
+
+      - name: Commit compiled mod
+        if: github.event_name == 'push' && github.ref == 'refs/heads/port-mianbao-2.4.5'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f build/libs/mianbao-sable-explosion-compat-1.0.0.jar
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f build/libs/mianbao-sable-explosion-compat-1.0.1.jar
+          git add -u build/libs
+          if ! git diff --cached --quiet; then
+            git commit -m "Update compiled mod for Mianbao 2.4.5 [skip ci]"
+            git push origin HEAD:port-mianbao-2.4.5
+          fi
