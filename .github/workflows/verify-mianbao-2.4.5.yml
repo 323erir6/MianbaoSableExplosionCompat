@@ -36,21 +36,22 @@ jobs:
           set -euo pipefail
           mkdir -p ../_deps_sable_2_0_5 ../_deps_sable/META-INF/jarjar .ci-deps
 
-          curl -fL --retry 3 -A "Mozilla/5.0" \
-            "https://www.curseforge.com/minecraft/mc-mods/sable/download/8673825/file" \
+          curl -fL --retry 3 \
+            "https://mediafilez.forgecdn.net/files/8673/825/sable-neoforge-1.21.1-2.0.5.jar" \
             -o ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar
-          curl -fL --retry 3 -A "Mozilla/5.0" \
-            "https://www.curseforge.com/minecraft/mc-mods/mianbaos-newmodernwarfare/download/8684048/file" \
+          curl -fL --retry 3 \
+            "https://mediafilez.forgecdn.net/files/8684/048/mianbaos_modernwarfare-2.4.5-neoforge.jar" \
             -o .ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar
+
+          unzip -t ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar >/dev/null
+          unzip -t .ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar >/dev/null
 
           COMPANION_PATH="$(unzip -Z1 ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar | grep -E 'META-INF/jarjar/sable-companion-common-.*\.jar$' | head -n 1)"
           test -n "$COMPANION_PATH"
           unzip -p ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar "$COMPANION_PATH" \
             > ../_deps_sable/META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar
 
-          test -s ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar
-          test -s ../_deps_sable/META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar
-          test -s .ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar
+          unzip -t ../_deps_sable/META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar >/dev/null
 
       - name: Build and verify hooks against Mianbao 2.4.5
         run: gradle --no-daemon clean build -PmianbaoJar="$PWD/.ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar"
