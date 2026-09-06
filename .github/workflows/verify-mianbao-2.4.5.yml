@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - port-mianbao-2.4.5
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -68,7 +71,6 @@ jobs:
                   break
 
           if found is None:
-              # Fallback for page layouts where the file id is serialized next to the filename.
               patterns = [
                   rf'"id"\s*:\s*(\d+)[^{{}}]{{0,4000}}{re.escape(target)}',
                   rf'{re.escape(target)}[^{{}}]{{0,4000}}"id"\s*:\s*(\d+)',
