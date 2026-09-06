@@ -40,7 +40,7 @@ jobs:
             "https://mediafilez.forgecdn.net/files/8673/825/sable-neoforge-1.21.1-2.0.5.jar" \
             -o ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar
           curl -fL --retry 3 \
-            "https://mediafilez.forgecdn.net/files/8684/048/mianbaos_modernwarfare-2.4.5-neoforge.jar" \
+            "https://cursemaven.com/curse/maven/mianbaos-newmodernwarfare-1619723/8684048/mianbaos-newmodernwarfare-1619723-8684048.jar" \
             -o .ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar
 
           unzip -t ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar >/dev/null
