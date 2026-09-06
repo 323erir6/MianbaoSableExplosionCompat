@@ -36,71 +36,11 @@ jobs:
           set -euo pipefail
           mkdir -p ../_deps_sable_2_0_5 ../_deps_sable/META-INF/jarjar .ci-deps
 
-          python3 <<'PY'
-          import base64
-          import html as html_module
-          import re
-          import urllib.request
-
-          target = "mianbaos_modernwarfare-2.4.5-neoforge.jar"
-          base = "https://www.curseforge.com/minecraft/mc-mods/mianbaos-newmodernwarfare"
-          request = urllib.request.Request(
-              base + "/files/all?page=1&pageSize=50&showAlphaFiles=hide&sortBy=dateCreated&sortOrder=desc",
-              headers={"User-Agent": "Mozilla/5.0"},
-          )
-          page = urllib.request.urlopen(request, timeout=30).read().decode("utf-8", "replace")
-          decoded = html_module.unescape(page)
-          if target not in decoded:
-              raise SystemExit("Could not find Mianbao 2.4.5 on the CurseForge files page")
-
-          pos = decoded.index(target)
-          window = decoded[max(0, pos - 50000):pos + 50000]
-
-          # CurseForge has used both ordinary hrefs and serialized Next.js data.
-          # Collect every file id around the exact filename, then validate candidates
-          # by opening the corresponding file detail page.
-          candidates = []
-          patterns = [
-              r"/files/(\d{6,10})",
-              r"fileId[^0-9]{0,80}(\d{6,10})",
-              r'"id"\s*:\s*(\d{6,10})',
-              r'\\"id\\"\s*:\s*(\d{6,10})',
-          ]
-          for pattern in patterns:
-              for value in re.findall(pattern, window, flags=re.I):
-                  if value not in candidates:
-                      candidates.append(value)
-
-          print("Candidate CurseForge file IDs near Mianbao 2.4.5:", candidates)
-          found = None
-          for file_id in candidates:
-              url = f"{base}/files/{file_id}"
-              try:
-                  detail = urllib.request.urlopen(
-                      urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20
-                  ).read().decode("utf-8", "replace")
-              except Exception:
-                  continue
-              if target in html_module.unescape(detail):
-                  found = file_id
-                  break
-
-          if found is None:
-              context = decoded[max(0, pos - 6000):pos + 6000].encode("utf-8")
-              print("Mianbao 2.4.5 page context (base64):", base64.b64encode(context).decode("ascii"))
-              raise SystemExit("Could not resolve the CurseForge file ID for Mianbao 2.4.5")
-
-          print("Resolved Mianbao 2.4.5 CurseForge file ID:", found)
-          with open(".ci-deps/mianbao-file-id.txt", "w", encoding="utf-8") as f:
-              f.write(found)
-          PY
-
-          MIANBAO_FILE_ID="$(cat .ci-deps/mianbao-file-id.txt)"
           curl -fL --retry 3 -A "Mozilla/5.0" \
             "https://www.curseforge.com/minecraft/mc-mods/sable/download/8673825/file" \
             -o ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar
           curl -fL --retry 3 -A "Mozilla/5.0" \
-            "https://www.curseforge.com/minecraft/mc-mods/mianbaos-newmodernwarfare/download/${MIANBAO_FILE_ID}/file" \
+            "https://www.curseforge.com/minecraft/mc-mods/mianbaos-newmodernwarfare/download/8684048/file" \
             -o .ci-deps/mianbaos_modernwarfare-2.4.5-neoforge.jar
 
           COMPANION_PATH="$(unzip -Z1 ../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar | grep -E 'META-INF/jarjar/sable-companion-common-.*\.jar$' | head -n 1)"
