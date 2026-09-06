@@ -1,7 +1,7 @@
-# Mianbao - Sable Explosion Compatibility 1.0.0
+# Mianbao - Sable Explosion Compatibility 1.0.1
 
 NeoForge 1.21.1 add-on, built against NeoForge 21.1.235, Sable 2.0.5,
-and the installed Mianbao's Modern Warfare 2.4.10 artifact.
+and Mianbao's NewModernWarfare 2.4.5.
 
 ## What is bridged
 
@@ -44,7 +44,7 @@ of tick cost: this add-on does not replace their original work loops.
 
 ## Installation and configuration
 
-Install `mianbao-sable-explosion-compat-1.0.0.jar` in the instance's mods
+Install `mianbao-sable-explosion-compat-1.0.1.jar` in the instance's mods
 directory and restart Minecraft/server. It contains no new blocks or recipes.
 The server config is created in:
 
@@ -58,13 +58,13 @@ Options (all true by default): `enabled`, `thermalEffects`,
 Run with Java 21:
 
 ```
-gradlew.bat build -PmianbaoJar=<path-to-mianbaos_modernwarfare-2.4.10-neoforge.jar>
+gradlew.bat build -PmianbaoJar=<path-to-mianbaos_modernwarfare-2.4.5-neoforge.jar>
 ```
 
 The build checks coordinate projection (negative/world/plot coordinates,
-rotation, scale and adjacent-cell ownership) and checks every relevant call
-in the 64 selected procedure classes against the actual Mianbao bytecode.
-This does not substitute for a transformed-mod in-game integration test.
+rotation, scale and adjacent-cell ownership) and checks every selected Mianbao
+procedure hook against the actual 2.4.5 bytecode. This does not substitute for
+a transformed-mod in-game integration test.
 
 In a disposable test world, compare:
 
