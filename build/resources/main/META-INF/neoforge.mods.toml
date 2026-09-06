@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="mianbao_sable_explosion_compat"
+version="1.0.0"
+displayName="Mianbao - Sable Explosion Compatibility"
+description='''Projects Mianbao custom explosion block effects between Sable plots and the terrain without replaying explosions.'''
+[[mixins]]
+config="mianbao_sable_explosion_compat.mixins.json"
+[[dependencies.mianbao_sable_explosion_compat]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.235,22)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.mianbao_sable_explosion_compat]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.21.2)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.mianbao_sable_explosion_compat]]
+modId="sable"
+type="required"
+versionRange="[2.0.5,2.1)"
+ordering="AFTER"
+side="BOTH"
+[[dependencies.mianbao_sable_explosion_compat]]
+modId="mianbaos_modernwarfare"
+type="required"
+versionRange="[2.4.10,2.5)"
+ordering="AFTER"
+side="BOTH"
