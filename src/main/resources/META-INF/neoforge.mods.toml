@@ -11,7 +11,7 @@ config="mianbao_sable_explosion_compat.mixins.json"
 [[dependencies.mianbao_sable_explosion_compat]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.235,22)"
+versionRange="[21.1.248,22)"
 ordering="NONE"
 side="BOTH"
 [[dependencies.mianbao_sable_explosion_compat]]
@@ -29,6 +29,6 @@ side="BOTH"
 [[dependencies.mianbao_sable_explosion_compat]]
 modId="mianbaos_modernwarfare"
 type="required"
-versionRange="[2.4.5,2.4.6)"
+versionRange="[2.4.5-neoforge]"
 ordering="AFTER"
 side="BOTH"

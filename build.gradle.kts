@@ -11,12 +11,27 @@ neoForge {
     version = property("neo_version") as String
     mods { create("mianbao_sable_explosion_compat") { sourceSet(sourceSets.main.get()) } }
 }
+
+val sableJarPath = providers.gradleProperty("sableJar")
+    .orElse("../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar")
+val sableJar = file(sableJarPath.get())
+val sableCompanion = layout.buildDirectory.file("sable-deps/sable-companion-common.jar")
+val extractSableCompanion by tasks.registering(Copy::class) {
+    from(zipTree(sableJar))
+    include("META-INF/jarjar/sable-companion-common-*.jar")
+    eachFile { path = "sable-companion-common.jar" }
+    includeEmptyDirs = false
+    into(layout.buildDirectory.dir("sable-deps"))
+    outputs.file(sableCompanion)
+}
+
 dependencies {
     testImplementation("org.ow2.asm:asm-tree:9.7.1")
     testImplementation("org.joml:joml:1.10.5")
-    compileOnly(files("../_deps_sable_2_0_5/sable-neoforge-1.21.1-2.0.5.jar"))
-    compileOnly(files("../_deps_sable/META-INF/jarjar/sable-companion-common-1.21.1-1.6.0.jar"))
+    compileOnly(files(sableJar))
+    compileOnly(files(sableCompanion))
 }
+tasks.compileJava { dependsOn(extractSableCompanion) }
 tasks.processResources {
     inputs.property("version", project.version)
     filesMatching("META-INF/neoforge.mods.toml") { expand("version" to project.version) }
@@ -35,3 +50,9 @@ val coverageTest by tasks.registering(JavaExec::class) {
     doFirst { args(providers.gradleProperty("mianbaoJar").get()) }
 }
 tasks.check { dependsOn(coverageTest) }
+val chunkCoverageTest by tasks.registering(JavaExec::class) {
+    dependsOn(tasks.testClasses)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("dev.mianbaosablecompat.ChunkCoverageTest")
+}
+tasks.check { dependsOn(chunkCoverageTest) }

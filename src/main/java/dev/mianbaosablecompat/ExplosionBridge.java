@@ -3,23 +3,30 @@ package dev.mianbaosablecompat;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,16 +38,26 @@ public final class ExplosionBridge {
             ResourceLocation.fromNamespaceAndPath("mianbaos_modernwarfare", "no_block"));
     private static final ThreadLocal<Frame> CURRENT = new ThreadLocal<>();
     private static final Matrix4dc IDENTITY = new Matrix4d();
+    private static final TicketType<ChunkPos> EXPLOSION_CHUNK_TICKET = TicketType.create(
+            "mianbao_sable_explosion", Comparator.comparingLong(ChunkPos::toLong), 100);
 
     public static final class Frame implements AutoCloseable {
         final Frame parent;
         final ServerLevel level;
         final SubLevel source;
         final Matrix4d sourceToWorld;
+        final Vec3 localOrigin;
+        final Vec3 worldOrigin;
+        final Set<Long> loadedChunks;
         Sample last;
 
-        Frame(Frame parent, ServerLevel level, SubLevel source, Matrix4d matrix) {
+        Frame(Frame parent, ServerLevel level, SubLevel source, Matrix4d matrix, Vec3 localOrigin) {
             this.parent = parent; this.level = level; this.source = source; this.sourceToWorld = matrix;
+            this.localOrigin = localOrigin;
+            org.joml.Vector3d projected = matrix.transformPosition(
+                    new org.joml.Vector3d(localOrigin.x, localOrigin.y, localOrigin.z));
+            this.worldOrigin = new Vec3(projected.x, projected.y, projected.z);
+            this.loadedChunks = parent != null && parent.level == level ? parent.loadedChunks : new HashSet<>();
         }
         @Override public void close() {
             if (parent == null) CURRENT.remove(); else CURRENT.set(parent);
@@ -62,9 +79,61 @@ public final class ExplosionBridge {
             source = parent.source;
             matrix.set(parent.sourceToWorld);
         }
-        Frame frame = new Frame(parent, level, source, matrix);
+        Frame frame = new Frame(parent, level, source, matrix, new Vec3(x, y, z));
         CURRENT.set(frame);
         return frame;
+    }
+
+    public static Runnable wrapTask(Runnable task) {
+        Frame captured = CURRENT.get();
+        if (captured == null || captured.level == null || captured.source == null) return task;
+        Matrix4d matrix = new Matrix4d(captured.sourceToWorld);
+        Vec3 localOrigin = captured.localOrigin;
+        return () -> {
+            Frame resumed = new Frame(CURRENT.get(), captured.level, captured.source, matrix, localOrigin);
+            CURRENT.set(resumed);
+            try {
+                task.run();
+            } finally {
+                resumed.close();
+            }
+        };
+    }
+
+    public static boolean shouldRunCommand(String command) {
+        Frame frame = CURRENT.get();
+        return frame == null || frame.source == null
+                || !command.stripLeading().toLowerCase(java.util.Locale.ROOT).startsWith("forceload ");
+    }
+
+    public static CommandSourceStack commandSource(CommandSourceStack source, String command) {
+        Frame frame = CURRENT.get();
+        if (frame == null || frame.source == null || frame.level != source.getLevel()
+                || !command.stripLeading().toLowerCase(java.util.Locale.ROOT)
+                .startsWith("particle mianbaos_modernwarfare:nuke")) return source;
+        return source.withPosition(uprightPosition(frame, source.getPosition()));
+    }
+
+    public static Vec3 explosionPosition(net.minecraft.world.level.Level level, double x, double y, double z) {
+        Frame frame = CURRENT.get();
+        if (frame == null || frame.source == null || frame.level != level) return new Vec3(x, y, z);
+        return uprightPosition(frame, new Vec3(x, y, z));
+    }
+
+    private static Vec3 uprightPosition(Frame frame, Vec3 local) {
+        return frame.worldOrigin.add(local.subtract(frame.localOrigin));
+    }
+
+    private static boolean isSourceCoordinate(Frame frame, double x, double z) {
+        return Sable.HELPER.isInPlotGrid(frame.level, ((int)Math.floor(x)) >> 4, ((int)Math.floor(z)) >> 4)
+                && frame.source.getPlot().contains(x, z);
+    }
+
+    private static boolean staleSourceAddress(ServerLevel level, BlockPos pos) {
+        Frame frame = CURRENT.get();
+        return frame != null && frame.level == level && frame.source != null
+                && isSourceCoordinate(frame, pos.getX() + 0.5, pos.getZ() + 0.5)
+                && Sable.HELPER.getContaining(level, pos) != frame.source;
     }
 
     private static boolean enabled(LevelAccessor world) {
@@ -141,12 +210,31 @@ public final class ExplosionBridge {
         boolean plot = Sable.HELPER.isInPlotGrid(level, pos.getX() >> 4, pos.getZ() >> 4);
         if (plot) {
             // A blast can remove its own plot before a nested scorching call.
-            // Never generate a terrain chunk at a now-vacant storage address.
-            if (Sable.HELPER.getContaining(level, pos) == null) return Blocks.AIR.defaultBlockState();
+            // It can also be reused by a newly assembled construction before a
+            // delayed callback runs. Neither case belongs to the old blast.
+            if (staleSourceAddress(level, pos) || Sable.HELPER.getContaining(level, pos) == null)
+                return Blocks.AIR.defaultBlockState();
         } else if (level.isOutsideBuildHeight(pos)) {
             return Blocks.VOID_AIR.defaultBlockState();
         }
+        if (!plot) ensureChunkLoaded(level, pos.getX() >> 4, pos.getZ() >> 4);
         return level.getBlockState(pos);
+    }
+
+    private static void ensureChunkLoaded(ServerLevel level, int chunkX, int chunkZ) {
+        if (!CompatConfig.LOAD_EXPLOSION_CHUNKS.get()
+                || Sable.HELPER.isInPlotGrid(level, chunkX, chunkZ)) return;
+        long key = ChunkPos.asLong(chunkX, chunkZ);
+        Frame frame = CURRENT.get();
+        if (frame != null && frame.level == level && !frame.loadedChunks.add(key)) return;
+        ChunkPos chunk = new ChunkPos(chunkX, chunkZ);
+        level.getChunkSource().addRegionTicket(EXPLOSION_CHUNK_TICKET, chunk, 0, chunk);
+        level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
+    }
+
+    private static void ensureChunksLoaded(ServerLevel level, AABB bounds) {
+        ChunkCoverage.visit(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ,
+                (chunkX, chunkZ) -> ensureChunkLoaded(level, chunkX, chunkZ));
     }
 
     public static BlockState getBlockState(LevelAccessor world, BlockPos pos) {
@@ -190,9 +278,9 @@ public final class ExplosionBridge {
         boolean thermal = isThermal(state);
         // Never copy controllers, NBT host blocks, powered/time/radius property
         // changes or new ordnance into another coordinate space.
-        if (!air && (!CompatConfig.THERMAL_EFFECTS.get() || !thermal))
-            return world.setBlock(pos, state, flags);
         ServerLevel level = (ServerLevel)world;
+        if (!air && (!CompatConfig.THERMAL_EFFECTS.get() || !thermal))
+            return !staleSourceAddress(level, pos) && world.setBlock(pos, state, flags);
         Sample sample = sample(level, pos);
         Selected selected = select(level, sample);
         List<Selected> before = new ArrayList<>();
@@ -242,6 +330,7 @@ public final class ExplosionBridge {
         if (!enabled(world) || !CompatConfig.ENTITY_QUERIES.get())
             return world.getEntitiesOfClass(type, bounds, predicate);
         ServerLevel level = (ServerLevel)world;
+        ensureChunksLoaded(level, bounds);
         Frame f = CURRENT.get();
         Matrix4d pose = null;
         if (f != null && f.level == level && f.source != null
@@ -257,6 +346,7 @@ public final class ExplosionBridge {
         // Mianbao's damage radius is a world-space distance, not plot scale.
         AABB projected = AABB.ofSize(new net.minecraft.world.phys.Vec3(center.x, center.y, center.z),
                 bounds.getXsize(), bounds.getYsize(), bounds.getZsize());
+        ensureChunksLoaded(level, projected);
         return world.getEntitiesOfClass(type, projected, predicate);
     }
 

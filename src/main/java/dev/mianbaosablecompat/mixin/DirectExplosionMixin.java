@@ -2,14 +2,19 @@ package dev.mianbaosablecompat.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.mianbaosablecompat.ExplosionBridge;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -18,7 +23,7 @@ import java.util.function.Predicate;
 
 /** Optional individual hooks: procedures have different signatures/call sites.
  * Hook coverage is verified against the supported Mianbao jar at build time.
- * This never intercepts Level.explode: Sable already integrates that path.
+ * Vanilla explosions are moved once from plot storage to physical space.
  */
 @Mixin(targets = {
     "net.mcreator.myfirstmod.procedures.AgmexplodeProcedure",
@@ -113,6 +118,35 @@ public abstract class DirectExplosionMixin {
         try (ExplosionBridge.Frame frame = ExplosionBridge.enter(world, x, y, z)) {
             original.call(world, x, y, z, strength, radius, damage);
         }
+    }
+
+    @WrapOperation(method = "*", at = @At(value = "INVOKE", target = "Lnet/mcreator/myfirstmod/MianbaosModernwarfareMod;queueServerWork(ILjava/lang/Runnable;)V"), require = 0)
+    private static void compat$queueServerWork(int delay, Runnable task, Operation<Void> original) {
+        original.call(delay, ExplosionBridge.wrapTask(task));
+    }
+
+    @WrapOperation(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/commands/Commands;performPrefixedCommand(Lnet/minecraft/commands/CommandSourceStack;Ljava/lang/String;)V"), require = 0)
+    private static void compat$command(Commands commands, CommandSourceStack source, String command, Operation<Void> original) {
+        if (ExplosionBridge.shouldRunCommand(command))
+            original.call(commands, ExplosionBridge.commandSource(source, command), command);
+    }
+
+    @WrapOperation(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;explode(Lnet/minecraft/world/entity/Entity;DDDFLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"), require = 0)
+    private static Explosion compat$explode(net.minecraft.world.level.Level world, Entity source,
+                                            double x, double y, double z, float radius,
+                                            net.minecraft.world.level.Level.ExplosionInteraction interaction,
+                                            Operation<Explosion> original) {
+        Vec3 position = ExplosionBridge.explosionPosition(world, x, y, z);
+        return original.call(world, source, position.x, position.y, position.z, radius, interaction);
+    }
+
+    @WrapOperation(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;explode(Lnet/minecraft/world/entity/Entity;DDDFLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"), require = 0)
+    private static Explosion compat$explodeServer(ServerLevel world, Entity source,
+                                                  double x, double y, double z, float radius,
+                                                  net.minecraft.world.level.Level.ExplosionInteraction interaction,
+                                                  Operation<Explosion> original) {
+        Vec3 position = ExplosionBridge.explosionPosition(world, x, y, z);
+        return original.call(world, source, position.x, position.y, position.z, radius, interaction);
     }
 
     @Redirect(method = "*", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/LevelAccessor;getBlockState(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"), require = 0)
